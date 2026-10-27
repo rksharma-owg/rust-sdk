@@ -1,0 +1,725 @@
+{
+  "name": "Fork preflight rmcp 1353",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/validate-rmcp-1370-20261026"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "env": {
+    "CARGO_TERM_COLOR": "always",
+    "ARTIFACT_DIR": "release-artifacts",
+    "CONFORMANCE_VERSION": "0.2.0-alpha.12"
+  },
+  "jobs": {
+    "commit-lint": {
+      "name": "Lint Commit Messages",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09"
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Setup Node.js",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22"
+          }
+        },
+        {
+          "name": "Install commitlint",
+          "run": "npm install --global @commitlint/cli@20.4.3 @commitlint/config-conventional@20.4.3"
+        },
+        {
+          "name": "Lint commit messages",
+          "run": "commitlint --extends @commitlint/config-conventional --from cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 --to e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09 --verbose"
+        }
+      ]
+    },
+    "fmt": {
+      "name": "Code Formatting",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust fmt",
+          "run": "rustup toolchain install nightly --component rustfmt"
+        },
+        {
+          "name": "Check formatting",
+          "run": "cargo +nightly fmt --all -- --check"
+        }
+      ]
+    },
+    "clippy": {
+      "name": "Lint with Clippy",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Run clippy (all features)",
+          "run": "cargo clippy --all-targets --all-features -- -D warnings"
+        },
+        {
+          "name": "Run clippy (all features except local)",
+          "run": "FEATURES=$(cargo metadata --no-deps --format-version 1 \\\n  | jq -r '[.packages[] | select(.name == \"rmcp\") | .features | keys[]\n            | select(startswith(\"__\") | not)\n            | select(. != \"local\")] | join(\",\")')\ncargo clippy --package rmcp --all-targets --no-default-features --features \"$FEATURES\" -- -D warnings\n"
+        },
+        {
+          "name": "Install cargo-hack",
+          "uses": "taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29",
+          "with": {
+            "tool": "cargo-hack"
+          }
+        },
+        {
+          "name": "Run clippy (reduced feature sets)",
+          "run": "cargo hack clippy --package rmcp --lib --each-feature --exclude-features local -- -D warnings\n"
+        }
+      ]
+    },
+    "semver": {
+      "name": "SemVer Check",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09"
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Install cargo-semver-checks",
+          "uses": "taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29",
+          "with": {
+            "tool": "cargo-semver-checks"
+          }
+        },
+        {
+          "name": "Determine semver release type",
+          "run": "if git log --format=%B \\\n  cd88056ffdc97756fbd98e5a12bbeb41758f0ce8..e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09 \\\n  | grep -Eq '(^[A-Za-z0-9_-]+(\\([^)]*\\))?!:|^BREAKING[ -]CHANGE:)'; then\n  echo \"SEMVER_RELEASE_TYPE=major\" >> \"$GITHUB_ENV\"\nelse\n  echo \"SEMVER_RELEASE_TYPE=minor\" >> \"$GITHUB_ENV\"\nfi\n"
+        },
+        {
+          "name": "Check rmcp (default features)",
+          "run": "cargo semver-checks \\\n  --package rmcp \\\n  --baseline-rev cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 \\\n  --release-type \"$SEMVER_RELEASE_TYPE\" \\\n  --only-explicit-features \\\n  --features default\n"
+        },
+        {
+          "name": "Check rmcp (all features except local)",
+          "run": "FEATURES=$(cargo metadata --no-deps --format-version 1 \\\n  | jq -r '[.packages[] | select(.name == \"rmcp\") | .features | keys[]\n            | select(startswith(\"__\") | not)\n            | select(. != \"local\")] | join(\",\")')\ncargo semver-checks \\\n  --package rmcp \\\n  --baseline-rev cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 \\\n  --release-type \"$SEMVER_RELEASE_TYPE\" \\\n  --only-explicit-features \\\n  --features \"$FEATURES\"\n"
+        }
+      ]
+    },
+    "public-api": {
+      "name": "Public API Check",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09"
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Install cargo-public-api",
+          "uses": "taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29",
+          "with": {
+            "tool": "cargo-public-api"
+          }
+        },
+        {
+          "name": "Determine release type and deny flags",
+          "run": "if git log --format=%B \\\n  cd88056ffdc97756fbd98e5a12bbeb41758f0ce8..e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09 \\\n  | grep -Eq '(^[A-Za-z0-9_-]+(\\([^)]*\\))?!:|^BREAKING[ -]CHANGE:)'; then\n  SEMVER_RELEASE_TYPE=major\nelse\n  SEMVER_RELEASE_TYPE=minor\nfi\ncase \"$SEMVER_RELEASE_TYPE\" in\n  major) DENY=\"\" ;;\n  patch) DENY=\"--deny added --deny changed --deny removed\" ;;\n  *)     DENY=\"--deny changed --deny removed\" ;;\nesac\necho \"SEMVER_RELEASE_TYPE=$SEMVER_RELEASE_TYPE\" >> \"$GITHUB_ENV\"\necho \"DENY=$DENY\" >> \"$GITHUB_ENV\"\n"
+        },
+        {
+          "name": "Check rmcp (default features)",
+          "run": "cargo public-api \\\n  --package rmcp \\\n  -ss \\\n  diff \\\n  $DENY \\\n  --force \\\n  cd88056ffdc97756fbd98e5a12bbeb41758f0ce8..e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\n"
+        },
+        {
+          "name": "Check rmcp (all features except local)",
+          "run": "BASE_SHA=cd88056ffdc97756fbd98e5a12bbeb41758f0ce8\n# `cargo public-api diff` builds both revisions with the same feature\n# set, so a feature that exists on only one side (e.g. a feature added\n# or removed by this PR) would fail to build the other revision. Diff\n# only the features present in BOTH the base and the head; features\n# unique to one side are necessarily pure additions/removals, which the\n# release-type deny flags already govern.\nlist_features() {\n  cargo metadata --no-deps --format-version 1 --manifest-path \"$1/Cargo.toml\" \\\n    | jq -r '.packages[] | select(.name == \"rmcp\") | .features | keys[]\n             | select(startswith(\"__\") | not)\n             | select(. != \"local\")'\n}\nlist_features \".\" | sort -u > \"$RUNNER_TEMP/head_features\"\ngit worktree add --detach \"$RUNNER_TEMP/rmcp-base\" \"$BASE_SHA\"\nlist_features \"$RUNNER_TEMP/rmcp-base\" | sort -u > \"$RUNNER_TEMP/base_features\"\ngit worktree remove --force \"$RUNNER_TEMP/rmcp-base\"\nFEATURES=$(comm -12 \"$RUNNER_TEMP/head_features\" \"$RUNNER_TEMP/base_features\" | paste -sd, -)\ncargo public-api \\\n  --package rmcp \\\n  --features \"$FEATURES\" \\\n  -ss \\\n  diff \\\n  $DENY \\\n  --force \\\n  \"$BASE_SHA\"..e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\n"
+        }
+      ]
+    },
+    "spelling": {
+      "name": "spell check with typos",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Spell Check Repo",
+          "uses": "crate-ci/typos@00f422f3b19c57bc6338715ebfe3316d38768461"
+        }
+      ]
+    },
+    "msrv": {
+      "name": "Check MSRV",
+      "runs-on": "ubuntu-latest",
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Read MSRV from Cargo.toml",
+          "run": "MSRV=$(cargo metadata --no-deps --format-version 1 \\\n  | jq -r '.packages[] | select(.name == \"rmcp\") | .rust_version')\necho \"MSRV=$MSRV\" >> \"$GITHUB_ENV\"\n"
+        },
+        {
+          "name": "Install MSRV Rust",
+          "uses": "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772",
+          "with": {
+            "toolchain": "${{ env.MSRV }}"
+          }
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Check default workspace members with MSRV",
+          "run": "cargo +${{ env.MSRV }} check --all-targets --all-features"
+        }
+      ]
+    },
+    "test": {
+      "name": "Run Tests",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Setup Node.js",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22"
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "name": "Set up Python",
+          "run": "uv python install"
+        },
+        {
+          "name": "Create venv for python",
+          "run": "uv venv"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Run tests",
+          "run": "cargo test --all-features"
+        },
+        {
+          "name": "Run lib tests without default features",
+          "run": "cargo test -p rmcp --lib --no-default-features"
+        },
+        {
+          "name": "Check published crates ship LICENSE",
+          "run": "for crate in rmcp rmcp-macros; do\n  cargo package --list -p \"$crate\" | grep -qx LICENSE\ndone\n"
+        }
+      ]
+    },
+    "test-no-local": {
+      "name": "Run Tests (no local feature)",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Setup Node.js",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22"
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "name": "Set up Python",
+          "run": "uv python install"
+        },
+        {
+          "name": "Create venv for python",
+          "run": "uv venv"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Run tests without local feature",
+          "run": "FEATURES=$(cargo metadata --no-deps --format-version 1 \\\n  | jq -r '[.packages[] | select(.name == \"rmcp\") | .features | keys[]\n            | select(startswith(\"__\") | not)\n            | select(. != \"local\")] | join(\",\")')\ncargo test -p rmcp --features \"$FEATURES\"\n"
+        }
+      ]
+    },
+    "coverage": {
+      "name": "Code Coverage",
+      "runs-on": "ubuntu-latest",
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Setup Node.js",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22"
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "name": "Set up Python",
+          "run": "uv python install"
+        },
+        {
+          "name": "Create venv for python",
+          "run": "uv venv"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Install cargo-llvm-cov",
+          "run": "cargo install cargo-llvm-cov"
+        },
+        {
+          "name": "Install llvm-tools-preview",
+          "run": "rustup component add llvm-tools-preview"
+        },
+        {
+          "name": "Run tests with coverage",
+          "run": "cargo llvm-cov --all-features"
+        }
+      ]
+    },
+    "example-test": {
+      "name": "Example test",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Setup Node.js",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22"
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "name": "Set up Python",
+          "run": "uv python install"
+        },
+        {
+          "name": "Create venv for python",
+          "run": "uv venv"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Add target WASI preview 2",
+          "run": "rustup target add wasm32-wasip2\n"
+        },
+        {
+          "name": "Build examples",
+          "run": "for dir in examples/*/ ; do\n  if [ -f \"$dir/Cargo.toml\" ]; then\n    echo \"Building $dir\"\n\n    if [[ \"$dir\" == *\"wasi\"* ]]; then\n      cargo build --manifest-path \"$dir/Cargo.toml\" --target wasm32-wasip2\n    else\n      cargo build --manifest-path \"$dir/Cargo.toml\" --all-features --tests\n    fi\n  fi\ndone\n"
+        },
+        {
+          "name": "Run tests in examples",
+          "run": "# Tests are run for each subdirectory in the example directory.\nfor dir in examples/*/ ; do\n  if [ -f \"$dir/Cargo.toml\" ]; then\n    if [[ \"$dir\" != *\"wasi\"* ]]; then\n      echo \"Testing $dir\"\n      cargo test --manifest-path \"$dir/Cargo.toml\" --all-features --all-targets\n    fi\n  fi\ndone\n"
+        }
+      ]
+    },
+    "security_audit": {
+      "name": "Security Audit",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Install cargo-audit",
+          "run": "cargo install cargo-audit"
+        },
+        {
+          "name": "Run cargo-audit",
+          "run": "cargo audit"
+        }
+      ]
+    },
+    "doc": {
+      "name": "Generate Documentation",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust",
+          "uses": "dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Generate documentation",
+          "run": "cargo +nightly doc --no-deps -p rmcp -p rmcp-macros --all-features\n",
+          "env": {
+            "RUSTDOCFLAGS": "--cfg docsrs -Dwarnings"
+          }
+        }
+      ]
+    },
+    "conformance-server": {
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 10,
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust toolchain",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Build conformance binaries",
+          "run": "cargo build -p mcp-conformance"
+        },
+        {
+          "name": "Test conformance server",
+          "run": "cargo test -p mcp-conformance --bin conformance-server"
+        },
+        {
+          "name": "Start conformance server",
+          "run": "PORT=8001 ./target/debug/conformance-server &\necho $! > server.pid\nfor _ in $(seq 1 30); do\n  if curl -s -o /dev/null http://127.0.0.1:8001/mcp; then\n    exit 0\n  fi\n  sleep 1\ndone\necho \"conformance server did not become ready\" >&2\nexit 1\n"
+        },
+        {
+          "name": "Run 2025-11-25 server suite",
+          "run": "npx -y \"@modelcontextprotocol/conformance@${CONFORMANCE_VERSION}\" server \\\n  --url http://127.0.0.1:8001/mcp \\\n  --suite all \\\n  --spec-version 2025-11-25 \\\n  -o conformance-results/2025-11-25\n"
+        },
+        {
+          "name": "Run 2026-07-28 server suite",
+          "run": "npx -y \"@modelcontextprotocol/conformance@${CONFORMANCE_VERSION}\" server \\\n  --url http://127.0.0.1:8001/mcp \\\n  --suite all \\\n  --spec-version 2026-07-28 \\\n  -o conformance-results/2026-07-28\n"
+        },
+        {
+          "name": "Run extension server scenarios (informational)",
+          "run": "scenarios=(\n  tasks-lifecycle\n  tasks-capability-negotiation\n  tasks-wire-fields\n  tasks-request-state-removal\n  tasks-mrtr-input\n  tasks-request-headers\n  tasks-dispatch-and-envelope\n  tasks-status-notifications\n  tasks-required-task-error\n  tasks-mrtr-composition\n)\nfor scenario in \"${scenarios[@]}\"; do\n  npx -y \"@modelcontextprotocol/conformance@${CONFORMANCE_VERSION}\" server \\\n    --url http://127.0.0.1:8001/mcp \\\n    --scenario \"$scenario\" \\\n    --expected-failures conformance/expected-failures-extensions.yaml \\\n    -o conformance-extension-results\ndone\n"
+        },
+        {
+          "name": "Stop conformance server",
+          "if": "always()",
+          "run": "kill \"$(cat server.pid)\" 2>/dev/null || true"
+        },
+        {
+          "name": "Upload results",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "conformance-server-results",
+            "path": "conformance-results\nconformance-extension-results\n"
+          }
+        }
+      ]
+    },
+    "conformance-client": {
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 10,
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Install Rust toolchain",
+          "uses": "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c"
+        },
+        {
+          "uses": "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        },
+        {
+          "name": "Build conformance binaries",
+          "run": "cargo build -p mcp-conformance"
+        },
+        {
+          "name": "Run 2025-11-25 client suite",
+          "run": "npx -y \"@modelcontextprotocol/conformance@${CONFORMANCE_VERSION}\" client \\\n  --command \"$(pwd)/target/debug/conformance-client\" \\\n  --suite all \\\n  --spec-version 2025-11-25 \\\n  -o conformance-client-results/2025-11-25\n"
+        },
+        {
+          "name": "Run 2026-07-28 client suite",
+          "run": "npx -y \"@modelcontextprotocol/conformance@${CONFORMANCE_VERSION}\" client \\\n  --command \"$(pwd)/target/debug/conformance-client\" \\\n  --suite all \\\n  --spec-version 2026-07-28 \\\n  -o conformance-client-results/2026-07-28\n"
+        },
+        {
+          "name": "Run extension client suite (informational)",
+          "run": "npx -y \"@modelcontextprotocol/conformance@${CONFORMANCE_VERSION}\" client \\\n  --command \"$(pwd)/target/debug/conformance-client\" \\\n  --suite extensions \\\n  --expected-failures conformance/expected-failures-extensions.yaml \\\n  -o conformance-client-results/extensions\n"
+        },
+        {
+          "name": "Upload results",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "conformance-client-results",
+            "path": "conformance-client-results"
+          }
+        }
+      ]
+    },
+    "codeql-analyze": {
+      "name": "Analyze",
+      "runs-on": "ubuntu-latest",
+      "permissions": {
+        "security-events": "write",
+        "contents": "read"
+      },
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "language": [
+            "rust",
+            "javascript-typescript",
+            "python",
+            "actions"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout repository",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Verify exact source and baseline",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest \"$(git rev-parse HEAD)\" = \"e41a21bf6f0dc0c9431daaca765f1bf2a9c14e09\"\ngit merge-base --is-ancestor cd88056ffdc97756fbd98e5a12bbeb41758f0ce8 HEAD\nprintf 'Source: %s\\nBaseline: %s\\nWorkflow: %s\\n' \"$(git rev-parse HEAD)\" 'cd88056ffdc97756fbd98e5a12bbeb41758f0ce8' '${{ github.workflow_sha }}'\nrustc --version\ncargo --version\n"
+        },
+        {
+          "name": "Initialize CodeQL",
+          "uses": "github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
+          "with": {
+            "languages": "${{ matrix.language }}",
+            "config-file": "./.github/codeql/codeql-config.yml"
+          }
+        },
+        {
+          "name": "Autobuild",
+          "uses": "github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
+        },
+        {
+          "name": "Perform CodeQL Analysis",
+          "uses": "github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
+        }
+      ]
+    }
+  }
+}
